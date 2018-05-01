@@ -1,18 +1,35 @@
 //
-//  ValueTests.cpp
-//  Fleece
+// ValueTests.cc
 //
-//  Created by Jens Alfke on 11/26/15.
-//  Copyright (c) 2015-2016 Couchbase. All rights reserved.
+// Copyright (c) 2015 Couchbase, Inc All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
+
 #include "FleeceTests.hh"
 #include "Value.hh"
 #include "varint.hh"
+#include "DeepIterator.hh"
+#include <sstream>
+
 #undef NOMINMAX
 
 namespace fleece {
+    using namespace std;
     using namespace internal;
 
     class ValueTests {  // Value declares this as a friend so it can call private API
@@ -81,6 +98,54 @@ namespace fleece {
 
     TEST_CASE("Deref") {
         ValueTests::testDeref();
+    }
+
+    TEST_CASE("DeepIterator") {
+        alloc_slice input = readFile(kTestFilesDir "1person.fleece");
+        auto person = Value::fromData(input);
+
+        {
+            // Check iterating null:
+            DeepIterator i(nullptr);
+            CHECK(i.value() == nullptr);
+            CHECK(!i);
+            i.next();
+        }
+
+        {
+            // Check iterating a non-collection (a string in this case):
+            auto str = person->asDict()->get("_id"_sl);
+            CHECK(str->type() == kString);
+            DeepIterator i(str);
+            CHECK(i);
+            CHECK(i.value() == str);
+            CHECK(i.keyString() == nullslice);
+            CHECK(i.index() == 0);
+            CHECK(i.path().size() == 0);
+            i.next();
+            CHECK(!i);
+        }
+
+        {
+            stringstream s;
+            for (DeepIterator i(person, nullptr); i; ++i) {
+                s << i.jsonPointer() << ": " << i.value()->toString().asString() << "\n";
+            }
+            //cerr << s.str();
+            CHECK(s.str() == readFile(kTestFilesDir "1person-deepIterOutput.txt").asString());
+        }
+
+        {
+            stringstream s;
+            for (DeepIterator i(person, nullptr); i; ++i) {
+                if (i.path().empty())
+                    continue;
+                s << i.jsonPointer() << ": " << i.value()->toString().asString() << "\n";
+                i.skipChildren();
+            }
+            //cerr << s.str();
+            CHECK(s.str() == readFile(kTestFilesDir "1person-shallowIterOutput.txt").asString());
+        }
     }
 
 }

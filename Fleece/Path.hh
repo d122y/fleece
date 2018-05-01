@@ -1,13 +1,24 @@
 //
-//  Path.hh
-//  Fleece
+// Path.hh
 //
-//  Created by Jens Alfke on 9/28/16.
-//  Copyright © 2016 Couchbase. All rights reserved.
+// Copyright (c) 2016 Couchbase, Inc All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 #pragma once
 #include "Dict.hh"
+#include "function_ref.hh"
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,7 +38,8 @@ namespace fleece {
     public:
         class Element;
 
-        Path(const std::string &specifier, SharedKeys* =nullptr);
+        Path(const std::string &specifier,
+             SharedKeys* =nullptr);
 
         const std::string& specifier() const        {return _specifier;}
         const std::vector<Element>& path() const    {return _path;}
@@ -35,7 +47,16 @@ namespace fleece {
         const Value* eval(const Value *root NONNULL) const noexcept;
 
         /** One-shot evaluation; faster if you're only doing it once */
-        static const Value* eval(slice specifier, SharedKeys*, const Value *root NONNULL);
+        static const Value* eval(slice specifier,
+                                 SharedKeys*,
+                                 const Value *root NONNULL);
+
+        /** Evaluates a JSONPointer string (RFC 6901), which has a different syntax.
+            This can only be done one-shot since JSONPointer path components are ambiguous unless
+            the actual JSON is present (a number could be an array index or dict key.) */
+        static const Value* evalJSONPointer(slice specifier,
+                                            SharedKeys*,
+                                            const Value* root NONNULL);
 
         class Element {
         public:
@@ -56,7 +77,7 @@ namespace fleece {
         };
 
     private:
-        static void forEachComponent(slice in, std::function<bool(char,slice,int32_t)> callback);
+        static void forEachComponent(slice in, function_ref<bool(char,slice,int32_t)> callback);
 
         const std::string _specifier;
         std::vector<Element> _path;

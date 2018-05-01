@@ -1,17 +1,20 @@
 //
-//  Encoder.cc
-//  Fleece
+// Encoder.cc
 //
-//  Created by Jens Alfke on 1/26/15.
-//  Copyright (c) 2015-2016 Couchbase. All rights reserved.
+// Copyright (c) 2015 Couchbase, Inc All rights reserved.
 //
-//  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
-//  except in compliance with the License. You may obtain a copy of the License at
-//    http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software distributed under the
-//  License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-//  either express or implied. See the License for the specific language governing permissions
-//  and limitations under the License.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 
 #include "Encoder.hh"
 #include "Fleece.hh"
@@ -50,7 +53,7 @@ namespace fleece {
         throwIf(_items->size() > 1, EncodeError, "top level must have only one value");
 
         if (_items->size() > 0) {
-            checkPointerWidths(_items);
+            checkPointerWidths(_items, nextWritePos());
             fixPointers(_items);
             Value &root = (*_items)[0];
             if (_items->wide) {
@@ -307,7 +310,10 @@ namespace fleece {
     }
 
 
-    void Encoder::writeValue(const Value *value, const SharedKeys *sk) {
+    void Encoder::writeValue(const Value *value,
+                             const SharedKeys *sk,
+                             const WriteValueFunc *writeNestedValue)
+    {
         if (valueIsInBase(value) && !isNarrowValue(value)) {
             writePointer( (ssize_t)value - (ssize_t)_base.end() );
         } else switch (value->tag()) {
@@ -328,7 +334,8 @@ namespace fleece {
                 auto iter = value->asArray()->begin();
                 beginArray(iter.count());
                 for (; iter; ++iter) {
-                    writeValue(iter.value(), sk);
+                    if (!writeNestedValue || !(*writeNestedValue)(nullptr, iter.value()))
+                        writeValue(iter.value(), sk, writeNestedValue);
                 }
                 endArray();
                 break;
@@ -337,17 +344,21 @@ namespace fleece {
                 auto iter = value->asDict()->begin();
                 beginDictionary(iter.count());
                 for (; iter; ++iter) {
-                    if (iter.key()->isInteger()) {
-                        int intKey = (int)iter.key()->asInt();
-                        if (sk && sk != _sharedKeys) {
-                            writeKey(sk->decode(intKey));
+                    if (!writeNestedValue || !(*writeNestedValue)(iter.key(), iter.value())) {
+                        if (iter.key()->isInteger()) {
+                            int intKey = (int)iter.key()->asInt();
+                            if (sk && sk != _sharedKeys) {
+                                slice keySlice = sk->decode(intKey);
+                                throwIf(!keySlice, InvalidData, "Unrecognized integer key");
+                                writeKey(keySlice);
+                            } else {
+                                writeKey(intKey);
+                            }
                         } else {
-                            writeKey(intKey);
+                            writeKey(iter.key()->asString());
                         }
-                    } else {
-                        writeKey(iter.key()->asString());
+                        writeValue(iter.value(), sk, writeNestedValue);
                     }
-                    writeValue(iter.value(), sk);
                 }
                 endDictionary();
                 break;
@@ -378,9 +389,8 @@ namespace fleece {
     }
 
     // Check whether any pointers in _items can't fit in a narrow Value:
-    void Encoder::checkPointerWidths(valueArray *items) {
+    void Encoder::checkPointerWidths(valueArray *items, size_t base) {
         if (!items->wide) {
-            size_t base = nextWritePos();
             for (auto v = items->begin(); v != items->end(); ++v) {
                 if (v->isPointer()) {
                     ssize_t pos = v->pointerValue<true>() - _base.size;
@@ -454,6 +464,21 @@ namespace fleece {
         }
     }
 
+    void Encoder::writeKey(const Value *key, SharedKeys *sk) {
+        if (key->isInteger()) {
+            int intKey = (int)key->asInt();
+            if (sk && sk != _sharedKeys) {
+                slice keySlice = sk->decode(intKey);
+                throwIf(!keySlice, InvalidData, "Unrecognized integer key");
+                writeKey(keySlice);
+            } else {
+                writeKey(intKey);
+            }
+        } else {
+            writeKey(key->asString());
+        }
+    }
+
     void Encoder::addedKey(slice str) {
         if (_usuallyTrue(_sortKeys))
             _items->keys.push_back(str);
@@ -510,8 +535,6 @@ namespace fleece {
         if (_sortKeys && tag == kDictTag)
             sortDict(*items);
 
-        checkPointerWidths(items);
-
         auto nValues = items->size();    // includes keys if this is a dict!
         auto count = (uint32_t)nValues;
         if (items->tag == kDictTag)
@@ -528,6 +551,9 @@ namespace fleece {
             if (bufLen & 1)
                 buf[bufLen++] = 0;
         }
+
+        checkPointerWidths(items, nextWritePos() + bufLen);
+
         if (items->wide)
             buf[0] |= 0x08;     // "wide" flag
         writeValue(items->tag, buf, bufLen, (count==0));          // can inline only if empty

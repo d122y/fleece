@@ -1,17 +1,20 @@
 //
-//  fleece_C_impl.cc
-//  Fleece
+// fleece_C_impl.cc
 //
-//  Created by Jens Alfke on 5/13/16.
-//  Copyright (c) 2016 Couchbase. All rights reserved.
+// Copyright (c) 2016 Couchbase, Inc All rights reserved.
 //
-//  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
-//  except in compliance with the License. You may obtain a copy of the License at
-//    http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software distributed under the
-//  License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-//  either express or implied. See the License for the specific language governing permissions
-//  and limitations under the License.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 
 #include "Fleece_C_impl.hh"
 #include "Fleece.h"
@@ -243,6 +246,35 @@ FLValue FLDict_GetWithKey(FLDict d, FLDictKey *k) {
 
 size_t FLDict_GetWithKeys(FLDict d, FLDictKey keys[], FLValue values[], size_t count) {
     return d->get((Dict::key*)keys, values, count);
+}
+
+
+#pragma mark - DEEP ITERATOR:
+
+
+FLDeepIterator FLDeepIterator_New(FLValue v, FLSharedKeys sk)   {return new DeepIterator(v, sk);}
+void FLDeepIterator_Free(FLDeepIterator i)                      {delete i;}
+FLValue FLDeepIterator_GetValue(FLDeepIterator i)               {return i->value();}
+FLSlice FLDeepIterator_GetKey(FLDeepIterator i)                 {return i->keyString();}
+uint32_t FLDeepIterator_GetIndex(FLDeepIterator i)              {return i->index();}
+size_t FLDeepIterator_GetDepth(FLDeepIterator i)                {return i->path().size();}
+void FLDeepIterator_SkipChildren(FLDeepIterator i)              {i->skipChildren();}
+
+bool FLDeepIterator_Next(FLDeepIterator i) {
+    i->next();
+    return i->value() != nullptr;
+}
+
+void FLDeepIterator_GetPath(FLDeepIterator i, FLPathComponent* *outPath, size_t *outDepth) {
+    static_assert(sizeof(FLPathComponent) == sizeof(DeepIterator::PathComponent),
+                  "FLPathComponent does not match PathComponent");
+    auto &path = i->path();
+    *outPath = (FLPathComponent*) path.data();
+    *outDepth = path.size();
+}
+
+FLSliceResult FLDeepIterator_GetJSONPointer(FLDeepIterator i) {
+    return toSliceResult(alloc_slice(i->jsonPointer()));
 }
 
 

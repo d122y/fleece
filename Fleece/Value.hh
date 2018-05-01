@@ -1,17 +1,20 @@
 //
-//  Value.hh
-//  Fleece
+// Value.hh
 //
-//  Created by Jens Alfke on 1/25/15.
-//  Copyright (c) 2015-2016 Couchbase. All rights reserved.
+// Copyright (c) 2015 Couchbase, Inc All rights reserved.
 //
-//  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
-//  except in compliance with the License. You may obtain a copy of the License at
-//    http://www.apache.org/licenses/LICENSE-2.0
-//  Unless required by applicable law or agreed to in writing, software distributed under the
-//  License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-//  either express or implied. See the License for the specific language governing permissions
-//  and limitations under the License.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 
 #pragma once
 #include "Internal.hh"
@@ -110,6 +113,9 @@ namespace fleece {
 
         /** If this value is a dictionary, returns it cast to 'const Dict*', else returns nullptr. */
         const Dict* asDict() const noexcept;
+
+        static const Array* asArray(const Value *v)     {return v ?v->asArray() : nullptr;}
+        static const Dict*  asDict(const Value *v)      {return v ?v->asDict()  : nullptr;}
 
         /** Converts any _non-collection_ type to string form. */
         alloc_slice toString() const;

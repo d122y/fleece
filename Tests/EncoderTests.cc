@@ -1,9 +1,19 @@
 //
-//  EncoderTests.cpp
-//  Fleece
+// EncoderTests.cpp
 //
-//  Created by Jens Alfke on 11/14/15.
-//  Copyright (c) 2015-2016 Couchbase. All rights reserved.
+// Copyright (c) 2015 Couchbase, Inc All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 //
 
 #include "FleeceTests.hh"
@@ -495,6 +505,24 @@ public:
         checkOutput("4568 656C 6C6F 6004 4161 8005 4161 8007 8005");
         auto a = checkArray(4);
         REQUIRE(a->toJSON() == alloc_slice("[\"a\",\"hello\",\"a\",\"hello\"]"));
+    }
+
+    TEST_CASE("Widening Edge Case", "[Encoder]") {
+        // Tests an edge case in the Encoder's logic for widening an array/dict when a pointer
+        // reaches back 64KB. See couchbase/couchbase-lite-core#493
+        static constexpr size_t kMinStringLen = 60000, kMaxStringLen = 70000;
+        char *string = new char[kMaxStringLen];
+        memset(string, 'x', kMaxStringLen);
+        for (size_t stringLen = kMinStringLen; stringLen <= kMaxStringLen; ++stringLen) {
+            Encoder enc;
+            enc.beginArray();
+            enc.writeString("hi");
+            enc.writeString("there");
+            enc.writeString(slice{string, stringLen});
+            enc.endArray();
+            auto data = enc.extractOutput();
+        }
+        delete [] string;
     }
 
 #pragma mark - JSON:
